@@ -1,0 +1,17 @@
+# Build output
+*.exe
+*.o
+*.out
+merklerex
+a.out
+
+# Runtime state (created automatically on first run)
+src/users.csv
+src/wallets.csv
+src/transactions.csv
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

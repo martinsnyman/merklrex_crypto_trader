@@ -1,108 +1,138 @@
-﻿# Merklerex (C++ Console Crypto Exchange Simulator)
+# Merklerex: C++ Crypto Exchange Simulator
 
-A small console program that simulates a basic crypto exchange: you can register/login, manage a wallet, place bids/asks on products like `ETH/BTC`, advance the market through time, and view simple candlestick summaries.
+A **console-based cryptocurrency exchange simulator** written in modern C++. It replays over **1 million real historical order-book entries** across several trading pairs. Users can register, log in, manage a multi-currency wallet, place bids and asks, and step the market forward through time while a **matching engine** fills their orders. Candlestick (OHLC) summaries can be printed for any product.
 
-## Requirements
+> My first substantial C++ project, built for a university Object-Oriented Programming module.
 
-- A C++ compiler (`g++`/MinGW-w64, or `clang++`) and a terminal.
-- Run the program from the `src/` folder so the CSV data files can be found.
+![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)
+![STL](https://img.shields.io/badge/STL-vector%20%7C%20map-555)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
 
-## Build and run
+---
 
-### Option A: Build with `g++` (recommended)
+## Features
 
-From the repository root:
+- **Five trading pairs** from real June 2020 market data: `BTC/USDT`, `ETH/BTC`, `ETH/USDT`, `DOGE/BTC`, `DOGE/USDT`
+- **User accounts**: register, log in and reset a password; credentials persist between sessions
+- **Wallets**: multi-currency balances, deposits and withdrawals; new users start with 10 BTC
+- **Order placement**: submit asks (sell) and bids (buy) such as `ETH/BTC,200,0.5`, with automatic balance checks
+- **Matching engine**: on each time step, asks and bids for every product are matched by price and wallets are settled
+- **Market stats**: per-product ask count and min/max price at the current timestamp
+- **Candlesticks**: open/high/low/close aggregated **daily, monthly or yearly** for any product and order type
+- **Transaction history**: every trade and funds movement is logged; view your last 5 trades
+- **Activity summary**: counts of your asks and bids, filterable by product, plus spending by timeframe
 
-```powershell
-cd src
-# simplest build (creates a default executable, e.g. a.exe on Windows)
-g++ *.cpp
-# run
-./a.exe
+## How it works
+
+```mermaid
+flowchart TD
+    M[MerkelMain<br/>menu loop and app state] --> UM[UserManager<br/>accounts and login]
+    M --> WS[WalletStore<br/>load/save balances]
+    M --> TL[TransactionLog<br/>append-only history]
+    M --> OB[OrderBook<br/>market data and matching]
+    OB --> CSV[CSVReader<br/>parse and tokenise]
+    OB --> OBE[OrderBookEntry]
+    OB --> CS[Candlestick<br/>OHLC aggregation]
+    WS --> W[Wallet]
+    CSV -.-> DATA[(20200601.csv<br/>~1M orders)]
 ```
 
-If you want a named binary:
+| Class | Responsibility |
+|---|---|
+| `MerkelMain` | Application entry point: login screen, main menu, input validation, ties everything together |
+| `OrderBook` | Holds all order-book entries; queries by product, time and type; runs the ask/bid **matching algorithm** |
+| `OrderBookEntry` | A single order: timestamp, product, type, price, amount, owner |
+| `CSVReader` | Tokenises CSV lines and converts them to order entries, with validation |
+| `Candlestick` | Aggregates prices into OHLC bars per day, month or year |
+| `Wallet` | Currency balances; checks whether an order can be fulfilled and processes sales |
+| `WalletStore` | Persists wallets to `wallets.csv` |
+| `UserManager` / `User` | Registration, login and password reset; persists to `users.csv` |
+| `TransactionLog` / `Transaction` | Appends every trade and funds movement to `transactions.csv` and reads history back |
 
-```powershell
-cd src
+### Matching logic
+
+For each product at the current timestamp, asks are sorted **lowest price first** and bids **highest price first**. A bid is matched to an ask whenever the bid price is at least the ask price. The trade executes at the ask price, partial fills carry the remainder forward, and the user's wallet is updated for any sale involving them. The simulation then advances to the next timestamp in the dataset.
+
+### Wallet checks
+
+- **Ask** on `ETH/BTC`: you must hold at least `amount` **ETH** (the base currency).
+- **Bid** on `ETH/BTC`: you must hold at least `amount × price` **BTC** (the quote currency).
+
+## Getting started
+
+**Requirements:** a C++17 compiler (`g++`/MinGW-w64, `clang++` or MSVC)
+
+```bash
+git clone https://github.com/martinsnyman/merklrex_crypto_trader.git
+cd merklrex_crypto_trader/src
+
 g++ -std=c++17 -O2 -o merklerex *.cpp
-./merklerex.exe
+./merklerex          # Windows: .\merklerex.exe
 ```
 
-## Data files and persistence
+> Run the program **from inside `src/`** so it can find the dataset. Loading the full 1M-row dataset takes a few seconds. For a quicker start, switch to the smaller `20200317.csv` in `MerkelMain.h`.
 
-The app loads and writes files using relative paths, so keep these files next to the executable (the `src/` folder already contains them):
+On first run, `users.csv`, `wallets.csv` and `transactions.csv` are created automatically when you register. They are git-ignored, so your local accounts stay on your machine.
 
-- Market dataset: `src/20200601.csv` (selected in `src/MerkelMain.h`)
-  - You can switch to the smaller `src/20200317.csv` by changing the filename in `src/MerkelMain.h`.
-- User accounts: `src/users.csv` (username, full name, email, hashed password)
-- Wallet balances: `src/wallets.csv` (username, currency, amount)
-- Transaction history: `src/transactions.csv` (username, timestamp, type, product/currency, price, amount, wallet snapshot)
+## Using the simulator
 
-## How to use
+**1. Log in or register.** Registering generates a numeric username and seeds a few starter orders so you can see matching straight away.
 
-### 1) Login / Register
+**2. Main menu** (shown with the current market timestamp):
 
-When the program starts, you must choose one of:
+```
+1: Print help                 6: Continue (match orders, advance time)
+2: Print exchange stats       7: Print candlestick data
+3: Make an offer (ask)        8: Manage funds (deposit/withdraw)
+4: Make a bid                 9: Recent transactions
+5: Print wallet              10: User activity summary
+```
 
-1. Login
-2. Register
-3. Forgot login / reset password
-4. Quit
+**3. Place an order** (options 3 and 4) as `product,price,amount`:
 
-Notes:
-- Registering creates a random numeric username and gives the new user an initial balance of `BTC = 10`.
-- On registration the program also seeds a few initial bids/asks (for each known product) and logs them.
+```
+ETH/BTC,0.025,0.5
+```
 
-### 2) Main menu
+**4. Candlesticks** (option 7): choose a product, `ask` or `bid`, and `daily`, `monthly` or `yearly`. The output looks like:
 
-After login, the app loops over this menu (shown with the current market timestamp):
+```
+Date        Open      High      Low       Close
+```
 
-1. Print help
-2. Print exchange stats (per product: ask count, min ask, max ask at the current time)
-3. Make an offer (ask)
-4. Make a bid
-5. Print wallet
-6. Continue (match asks<->bids for each product, update wallet for any sales, then move to the next timestamp)
-7. Print candlestick data (OHLC aggregated by day/month/year)
-8. Manage funds (deposit/withdraw)
-9. Recent transactions (shows the last 5 trade-related entries)
-10. User activity summary (counts asks/bids; optional product filter; spending by timeframe)
+## Project structure
 
-### Placing orders (options 3 and 4)
+```
+merklrex_crypto_trader/
+└── src/
+    ├── main.cpp                  # Entry point
+    ├── MerkelMain.{h,cpp}        # Menu loop and application logic
+    ├── OrderBook.{h,cpp}         # Market data queries and matching engine
+    ├── OrderBookEntry.{h,cpp}
+    ├── CSVReader.{h,cpp}
+    ├── Candlestick.{h,cpp}
+    ├── Wallet.{h,cpp}  WalletStore.{h,cpp}
+    ├── User.{h,cpp}    UserManager.{h,cpp}
+    ├── Transaction.{h,cpp}  TransactionLog.{h,cpp}
+    ├── 20200601.csv              # Full historical dataset (~1M rows)
+    └── 20200317.csv              # Small dataset for quick testing
+```
 
-You are prompted to enter:
+## What I learned
 
-`product,price,amount`
+- **OOP design**: breaking a program into classes with single, clear responsibilities
+- **STL containers and algorithms**: `std::vector`, `std::map`, `std::sort` with custom comparators
+- **Parsing and validation**: tokenising CSV and user input safely, handling bad input without crashing
+- **File I/O and persistence**: streaming a 60 MB dataset and saving user state across sessions
+- **Algorithms**: implementing a price-priority order matching engine
+- **Time handling**: grouping timestamps into daily, monthly and yearly buckets
 
-Example:
+## Limitations
 
-`ETH/BTC,200,0.5`
+- Passwords are hashed with `std::hash`. That's fine for a learning project but **not secure**; a real system would use a salted, slow hash such as bcrypt or Argon2.
+- A single-user, single-process simulation with no networking or concurrency.
+- Historical data is replayed rather than live, and user orders don't affect the recorded market.
 
-How the wallet check works:
-- **Ask** (`ETH/BTC`): you must have at least `amount` of the *base* currency (`ETH`).
-- **Bid** (`ETH/BTC`): you must have at least `amount * price` of the *quote* currency (`BTC`).
+---
 
-### Candlesticks (option 7)
-
-- Choose a product (e.g. `ETH/BTC`)
-- Choose an order type (`ask` or `bid`)
-- Choose timeframe: `daily`, `monthly`, or `yearly`
-
-The program prints `Date Open High Low Close` for each period.
-
-## Main learning points (first C++ project)
-
-- **OOP decomposition**: separating responsibilities into classes (`MerkelMain`, `OrderBook`, `Wallet`, `CSVReader`, `UserManager`, `WalletStore`, `TransactionLog`).
-- **STL data structures**: using `std::vector` for collections and `std::map` for balances / product sets.
-- **Parsing and validation**: tokenising CSV/input strings, converting to numbers, and validating menu + numeric input.
-- **Sorting/algorithms**: ordering entries by timestamp and matching asks to bids using sorted price lists.
-- **File I/O and persistence**: reading a large dataset and writing user/wallet/transaction state back to CSV.
-- **Time handling**: working with timestamps in the dataset and generating system timestamps for seeded orders.
-- **Debugging and iteration**: building a text UI loop, testing edge cases (bad input, insufficient funds), and refining features.
-
-## Notes / limitations
-
-- `users.csv` stores passwords using `std::hash` (fine for learning, not secure for real authentication).
-- This is a learning simulator; it is not a real exchange and does not model networking, concurrency, or realistic order books.
-
+**Author:** Martin Snyman · [GitHub](https://github.com/martinsnyman)
